@@ -1,0 +1,860 @@
+---
+title: "Paychex_LSTM_RNN_Rcode"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(reticulate)
+library(tensorflow)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lubridate)
+library(tidyverse)
+library(svDialogs)
+
+```
+
+```{r PC explorations}
+# 
+# ## data ##
+# #
+# #  1.  Establish an account on dataverse using the url: https://dataverse.org/researchers
+# #  2.  Get an API Token: click on your account name in the right hand corner 
+# ##install.packages("dataverse")
+# library("dataverse")
+# # Set environment
+# Sys.setenv("DATAVERSE_SERVER" = "dataverse.harvard.edu")
+# # Put your API Token below
+# Sys.setenv("DATAVERSE_KEY"    = "4c70468d-9bc7-4ff2-9480-0d0cd6e8a49c") 
+# # See whats out there with Dino as author
+# str(dataverse_search(author = "Dino"), 1)
+```
+
+
+```{r get-and-save-data}
+# (dataset <- get_dataset("doi:10.7910/DVN/2JYITQ"))  ## this is the global_id
+# 
+# #Change this below part, not needed
+# dataset
+# f <- get_file(dataset$files$id[1])
+# writeBin(get_file(dataset$files$id[1]),"PC21.csv")
+```
+
+
+```{r read-data}
+
+# #Removable code chunk
+# PC_data <- read.csv("PC21.csv")
+# tail(PC_data)
+# PC_data_ts <- ts(PC_data)
+# head(PC_data_ts)
+# plot.ts(PC_data_ts)
+```
+
+```{r ts-analysis, message=FALSE}
+# #Converts date into a more usable format
+# TZ    <- c("America/New_York")
+# ms.to.date = function(ms, t0="1970-01-01", timezone = TZ) {
+#   ## @ms: a numeric vector of milliseconds (big integers of 13 digits)
+#   ## @t0: a string of the format "yyyy-mm-dd", specifying the date that
+#   ##      corresponds to 0 millisecond
+#   ## @timezone: a string specifying a timezone that can be recognized by R
+#   ## return: a POSIXct vector representing calendar dates and times        
+#   sec = ms / 1000
+#   # Adding the reference date
+#   t0 <- "1970-01-01"
+#   as.POSIXct(sec, origin=t0, tz=timezone)
+# }
+# # Adding new columns for dates, days and hours
+# PC_data$dates <- ms.to.date(PC_data$timeinms)
+# PC_data$days <- weekdays(PC_data$dates)
+# PC_data$hours <- hour(PC_data$dates)
+# PC_data$numericdays <- wday(PC_data$dates)
+# 
+# head(PC_data)
+# write.csv(PC_data,"PayChex_testing123456.csv", row.names = FALSE)
+```
+
+
+```{python}
+import sys 
+import numpy as np # linear algebra
+from scipy.stats import randint
+import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv), data manipulation as in SQL
+import matplotlib.pyplot as plt # this is used for the plot the graph 
+#import seaborn as sns # used for plot interactive graph. 
+from sklearn.metrics import mean_squared_error,r2_score
+## Deep-learing:
+from tensorflow.keras.models import Model, load_model
+from tensorflow.keras.layers import Dense, Input, Multiply, Concatenate
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.optimizers import SGD, Adam
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.preprocessing import MinMaxScaler
+import itertools
+from tensorflow.keras.layers import LSTM
+from tensorflow.keras.layers import Dropout
+#import IPython
+import matplotlib as mpl
+import os
+import pickle
+#########################################################################################################
+#********************THIS WILL BE UPDATED SHORTLY TO PULL DIRECTLY FROM DATAVERSE***********************#
+#########################################################################################################
+#df2 = pd.read_csv (r"C:\Users\Tyler\Desktop\Newfolder2\PayChex\Data\PayChex_Data_convTimstamp_Date123.csv")
+#data = pd.read_csv(r"C:\Users\Tyler\Desktop\Newfolder2\PayChex\Data\PayChex_Data_convTimstamp_Date123.csv",parse_dates={'dt' : ['dates']}, infer_datetime_format=True, low_memory=False, na_values=['nan','?'], index_col='dt')
+  
+  
+                 
+#Get the data for metrics of interest
+# mask = np.logical_or(data['metricName'] == 'Calls per Minute', data['metricName'] == 'Average Response Time (ms)')
+# data_masked = data[mask]
+# date_range = pd.date_range(data_masked.index.min(), data_masked.index.max(), freq='H')
+# data_masked = data_masked.drop(columns=['busApp', 'metricFrequency','days','hours','numericdays','timeinms'])
+def loadData(dfraw):
+    #"""Takes data from dataverse as a dataframe, cleans up missing values, rearranges into row by date, expands variables.
+    #Output columns are the metric/service combinations followed by missing_columns that denote data which needed to be filled in
+    #and the expanded date columns.  Also, returns the number of metric per service columns.
+    #"""
+    #Get the data for metrics of interest
+    numMetrics = 2 #hard coded to take calls per minute & avg response time
+    mask = np.logical_or(dfraw['metricName'] == 'Calls per Minute', dfraw['metricName'] == 'Average Response Time (ms)')
+    data_masked = dfraw[mask]
+    date_range = pd.date_range(data_masked.index.min(), data_masked.index.max(), freq='H')
+    data_masked = data_masked.drop(columns=['busApp', 'metricFrequency','days','hours','numericdays','timeinms'])
+    #Expand data frame to all date-metric combinations, leaving N/A for missing data 
+    data_masked = data_masked.rename_axis('dt').reset_index()
+    index_full = pd.MultiIndex.from_product([date_range, data_masked.metricName.unique(), data_masked.serviceName.unique()], names=['dt', 'metricName', 'serviceName'])
+    df_full = data_masked.set_index(['dt', 'metricName','serviceName']).reindex(index_full).reset_index()
+    #Determine what services to use in model, currently all being utilized
+    #good_service is the list of services to include 
+    #(We are assuming all services can be used but could be edited in the future)
+    valServiceCounts = df_full.groupby('serviceName').count()
+    good_service = valServiceCounts.index
+    df_subset = df_full[df_full['serviceName'].isin(good_service)]
+    #Set all N/A values to 0, and add missing_column to denote real vs added 0 values
+    sortedGood = df_subset.pivot_table(index ='dt',columns =['metricName','serviceName'],values=['value'] ) 
+    missingdata = sortedGood.iloc[:,:len(good_service)].isna().astype(int)
+    missingdata.columns = ['missing_'+col for col in good_service]
+    sortedGood = pd.concat([sortedGood,missingdata],axis = 1).fillna(0)
+    #Take log of all variables
+    sortedGood.iloc[:,:2*len(good_service)] = np.log(sortedGood.iloc[:,:2*len(good_service)]+1)
+    sortedGood = sortedGood.reset_index()
+    #Dummification of dt 
+    sortedGood['Hour']= sortedGood['dt'].dt.hour
+    sortedGood['DayofWeek']= sortedGood['dt'].dt.dayofweek
+    sortedGood['Month']= sortedGood['dt'].dt.month
+    sortedGood = pd.get_dummies(sortedGood,columns = ['Hour','DayofWeek','Month'])
+    results = [sortedGood,len(good_service),numMetrics]
+    return results
+
+
+df2 = pd.read_csv (r"/Users/tranquynhphuongnghi/Desktop/LSTM/PayChex_Data_convTimstamp_Date123.csv")
+data = pd.read_csv(r"/Users/tranquynhphuongnghi/Desktop/LSTM/PayChex_Data_convTimstamp_Date123.csv", 
+                 parse_dates={'dt' : ['dates']}, infer_datetime_format=True, 
+                 low_memory=False, na_values=['nan','?'], index_col='dt')
+  
+#Function break comment
+
+def dfXform(df,numMetrics,numServices,chunk_length, scaler):
+    #From master_df grab the following:
+    # X is the values of dt & metrics used for prediction
+    # Y is the values of metrics to predict
+    # Z is binary record of which 0 values (in Y) are real or added, 1 = real 0 = fake
+    # T is dummified time values
+    # raw_dt is human readable time (not used in the model)
+    numout = numMetrics*numServices
+    scaled = df.copy()  # not actually scaled! (because the line below does scaling and is commented out)
+    # scaled.iloc[:,1:1+numout] = scaler.transform(scaled.iloc[:,1:1+numout]) 
+    raw_dt = scaled['dt'].values[1:] # raw date column
+    X = scaled.values[:-1,1:] # all columns except raw date
+    Y = scaled.values[1:,1:1+numout] # all service/metric columns
+    Z = 1-scaled.values[1:,1+numout:(1+numout+numServices)] # all missing_ columns
+    T = scaled.values[1:,1+numout+numServices:] # all expanded time columns
+    num_chunks = int(np.floor(len(X)/chunk_length))
+    extra_points = len(X)-num_chunks*chunk_length
+    if extra_points != 0:
+        print("Input data did not divide into an equal number of chunks, dropping oldest {} points".format(extra_points))
+    X = X[extra_points:].reshape(num_chunks,chunk_length,-1).astype(float)
+    Y = Y[extra_points:].reshape(num_chunks,chunk_length,-1).astype(float)
+    Z = Z[extra_points:].reshape(num_chunks,chunk_length,-1).astype(float)
+    T = T[extra_points:].reshape(num_chunks,chunk_length,-1).astype(float)
+    raw_dt = raw_dt[extra_points:].reshape(num_chunks,chunk_length,-1).astype(float)
+    X_last = scaled.values[-chunk_length:,1:].reshape(1,chunk_length,-1).astype(float)
+    raw_dt_last = scaled['dt'].values[-chunk_length:].reshape(1,chunk_length,-1).astype(float)
+    return (X, Z, T, raw_dt, Y),(X_last, raw_dt_last)
+    
+  
+  
+  
+
+#Expand data frame to all date-metric combinations, leaving N/A for missing data 
+chunk_length = 100
+num_chunks = 16
+num_train_chunks = 12
+
+num_test_chunks = num_chunks - num_train_chunks
+
+scalerFile = 'Scaler.pkl'
+results = loadData(data)
+df_parsed = results[0]
+numServices = results[1]
+numMetrics= results[2]
+numout = numMetrics*numServices
+scaler = pickle.load(open(scalerFile,'rb'))
+assert len(scaler.scale_) == numMetrics*numServices
+parsedData,lastHourData = dfXform(df_parsed,numMetrics,numServices,chunk_length, scaler)     
+X, Z, T, raw_dt, Y = parsedData
+
+print(df_parsed)
+print(numServices)
+print(numMetrics)
+
+#Populating list of metrics
+listMetrics = []
+for i in range(numMetrics):
+  listMetrics.append(df_parsed.columns[1+i*numServices][1])
+print(listMetrics)
+
+
+#Randomly divide chunks by train and test
+index= np.arange(num_chunks)
+np.random.seed(42)
+np.random.shuffle(index)
+X_train = X[index[:num_train_chunks]]
+Y_train = Y[index[:num_train_chunks]]
+X_test = X[index[num_train_chunks:]]
+Y_test = Y[index[num_train_chunks:]]
+#X_final = X_final.reshape(1,chunk_length,-1).astype(float)
+dt_train = raw_dt[index[:num_train_chunks]]
+dt_test = raw_dt[index[num_train_chunks:]]
+Z_train = Z[index[:num_train_chunks]]
+Z_test = Z[index[num_train_chunks:]]
+T_train = T[index[:num_train_chunks]]
+T_test = T[index[num_train_chunks:]]
+
+
+X_trainflat = X_train[:,:,:numout].reshape(num_train_chunks*chunk_length,-1)
+Y_trainflat = Y_train.reshape(num_train_chunks*chunk_length,-1)
+X_testflat = X_test[:,:,:numout].reshape(num_test_chunks*chunk_length,-1)
+Y_testflat = Y_test.reshape(num_test_chunks*chunk_length,-1)
+
+#Scaling
+from sklearn.preprocessing import MinMaxScaler
+
+Scaler = MinMaxScaler()
+Scaler.fit(X_trainflat)
+pickle.dump(Scaler,open('Scaler.pkl','wb'))
+X_trainflat = Scaler.transform(X_trainflat)
+X_testflat = Scaler.transform(X_testflat)
+Y_trainflat = Scaler.transform(Y_trainflat)
+Y_testflat = Scaler.transform(Y_testflat)
+
+X_train[:,:,:numout] = X_trainflat.reshape([-1,chunk_length,numout])
+X_test[:,:,:numout] = X_testflat.reshape([-1,chunk_length,numout])
+
+
+Y_train = Y_trainflat.reshape(Y_train.shape)
+Y_test = Y_testflat.reshape(Y_test.shape)
+
+
+#Define model architecture
+#Compile Model (when run, resets variables)
+
+def runModel(hidden_dim,epochs,x_train,y_train,z_train,x_test,y_test,z_test):
+    n_input = x_train.shape[-1]
+    # hidden_dim = 100
+    #input feeds rnn
+    input_ = Input(shape=(chunk_length, n_input))
+    pre = Dense(2*hidden_dim, activation='relu')(input_)
+    dropout = Dropout(0.2)(pre)
+    rnn = LSTM(hidden_dim, return_sequences=True) (dropout)
+    post = Dense(hidden_dim, activation='relu')(rnn)
+    pred = Dense(numout)(post) 
+    #pred = Dense(numout,activation='sigmoid')(post) 
+    z_in = Input(shape=(chunk_length,numServices))
+    zd_in = Concatenate()([z_in,z_in])
+    output = Multiply()([pred,zd_in])#masking 0
+    model = Model(inputs=[input_,z_in], outputs=output)
+    print(model.summary())
+    opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, amsgrad=False)
+    model.compile(loss='mse', optimizer=opt,metrics = [])
+    history = model.fit([x_train,z_train], y_train, epochs = epochs, validation_data = ([x_test, z_test],y_test))
+    return history,model
+
+#dims = [10,20,40,80,160,320]
+dims = [10,20]
+allHist = []
+
+for hidden_dim in dims:
+    history,_ = runModel(hidden_dim,200,X_train,Y_train,Z_train,X_test,Y_test,Z_test)
+    allHist.append(history)
+
+for hidden_dim ,history in zip(dims,allHist):
+    plt.plot(history.history['val_loss'])
+plt.legend(dims)    
+plt.show()
+plt.clf()
+
+for hidden_dim ,history in zip(dims,allHist):
+    plt.plot(history.history['loss'])
+plt.legend(dims)
+plt.show()
+plt.clf()
+
+
+history,model = runModel(100,500,X_train,Y_train,Z_train,X_test,Y_test,Z_test)
+
+model.save('LSTM_Model')
+
+pred1 = ((model.predict([X_test,Z_test])[:,-1,:]))
+pd.DataFrame(data = pred1, columns = df_parsed.columns[1:numout+1])
+
+#Show scaled true values on test data set
+actual = ((Y_test[:,-1,:]))
+pd.DataFrame(data = actual, columns = df_parsed.columns[1:numout+1])
+
+#populates the unique service list for Rshiny
+listServices = [el[2] for el in df_parsed.columns[1:1+numServices]]
+listServices
+#RMSE Report
+#Each row is a service/metric combination, the value is the RMSE of the scaled values, 
+#and the final int is the # of real data points (only valid points contributed to the RMSE values)
+
+##############################
+
+preds = model.predict([X_test,Z_test]) 
+
+error = 0
+count = 0
+
+rmseReport = []
+
+for i in range(2*numServices):
+  pp = preds[:,:,i].reshape(-1)
+  aa = Y_test[:,:,i].reshape(-1)
+  real_data_index = Z_test[:,:,i%numServices].reshape(-1).astype(bool)
+  pp = pp[real_data_index]
+  aa = aa[real_data_index]
+  error += np.square(pp-aa).sum()
+  count += len(pp)
+  rmse = np.sqrt(np.square(pp-aa).sum()/len(pp))
+  if i < numServices:
+    metric = 'Average Response Time (ms)'
+  else:
+    metric = 'Calls per Minute'
+  rmseReport.append((i,listServices[i%numServices],metric, rmse,len(pp)))
+
+rmseReport = pd.DataFrame(data = rmseReport,columns = ['origIndex','Service Name','metric','rmse','Valid Count'])
+#Last line is the overall RMSE across all services/metrics
+
+
+rmseReport
+
+#Fraction of pts within .1 threshhold of scaled predictions
+
+is_correct = (preds - Y_test) < 0.1
+is_correct = is_correct.reshape(-1)
+accuracy = np.sum(is_correct)/len(is_correct)
+print(accuracy)
+
+
+X_last, raw_dt_last = lastHourData #Z_last, T_last, raw_dt_last = lastHourData
+X_last_scaled = X_last.copy()
+X_lastflat = X_last[:,:,:numout].reshape(1*chunk_length,-1)
+X_lastflat_scaled = Scaler.transform(X_lastflat)
+X_last_scaled[:,:,:numout] = X_lastflat_scaled.reshape([-1,chunk_length,numout])
+X_last_scaled.max()
+
+
+predLast = model.predict([X_last_scaled,np.ones((1,chunk_length,numServices))])
+unscaledpred = scaler.inverse_transform(predLast[:,-1,:])[0]
+previousHour = (X_last_scaled[:,-1,:numMetrics*numServices]) #scaled
+actual = scaler.inverse_transform(previousHour)[0]
+predReal = np.exp(unscaledpred)-1
+actualReal = np.exp(actual)-1
+
+
+rmseReport['Previous Hour Scaled Value']=previousHour[0]
+rmseReport['Next Hour Scaled Prediction']=predLast[:,-1,:][0]
+rmseReport['Previous Hour Value']=actualReal
+rmseReport['Next Hour Prediction']=predReal
+rmseReport
+rmseReport.iloc[-5]
+
+
+train_preds = model.predict([X_train,Z_train])
+test_preds = model.predict([X_test,Z_test])
+
+
+def plot_by_index(serviceName, metricName, col_id_num, chunk_id=-1, train_data=True):
+    #set chunk_id to -1 to always pull most recent chunk 
+    if train_data:
+      plt.plot(np.arange(chunk_length),Y_train[chunk_id,:,col_id_num])
+      plt.plot(np.arange(chunk_length),model.predict([X_train,Z_train])[chunk_id,:,col_id_num])
+    else:
+      plt.plot(np.arange(chunk_length),Y_test[chunk_id,:,col_id_num])
+      plt.plot(np.arange(chunk_length),model.predict([X_test,Z_test])[chunk_id,:,col_id_num])
+    if col_id_num >= numServices:
+        Z_index = col_id_num - numServices
+    else:
+        Z_index = col_id_num
+    if train_data:
+      plt.plot(np.arange(chunk_length),Z_train[chunk_id,:,Z_index])
+    else:
+      plt.plot(np.arange(chunk_length),Z_test[chunk_id,:,Z_index])
+    plt.gca().legend(('real','predicted','True Data'))#,'Naive Model'))
+    print(rmseReport.iloc[col_id_num])
+    ##############Add color for data point (red)
+    plt.scatter(chunk_length,predLast[0,-1,col_id_num],color='red')
+    plt.show()
+    fileName = serviceName+metricName+".png"
+    plt.savefig(fileName)
+    plt.clf()
+
+
+col_id_num = 4
+
+for i in range(12):
+  plot_by_index(col_id_num, i)
+for i in range(4):
+  plot_by_index(col_id_num, i, False)  
+
+
+last_chunk = np.argmax(index)
+if last_chunk<num_train_chunks:
+  plot_by_index(col_id_num, last_chunk)
+else:
+  plot_by_index(col_id_num, last_chunk-num_train_chunks, False)
+
+
+#requested_service_name='cltprdsubscription-svc-pyx-ent-wlcore'
+#requested_metric_name = 'Average Response Time (ms)'
+#service_id = listServices.index(requested_service_name)
+#metric_id = listMetrics.index(requested_metric_name)
+#col_id_num = service_id + metric_id*numServices
+
+#if last_chunk<num_train_chunks:
+#  plot_by_index(col_id_num, last_chunk)
+#else:
+#  plot_by_index(col_id_num, last_chunk-num_train_chunks, False)
+
+
+
+#np.exp(0.03)
+#col_id_num
+#type(listServices)
+```
+
+
+
+```{r}
+#User input from shiny to r/python
+#s1 <- ("ent-ose-user-svc-par")
+#m1 <- ("Average Response Time (ms)")
+
+
+#r/python to rshiny
+serviceList <- as.list(py$listServices)
+metricList <- as.list(py$listMetrics)
+typeof(serviceList)
+
+#s = "fd"
+#as = paste(s, "is the", s, "month of the year.")
+#as
+#name = "myplot"
+#fileName = paste(name, ".png",sep = "")
+#fileName
+
+```
+
+
+```{python}
+#Generates user requested graph
+#service_id = listServices.index(r.s1)
+#metric_id = listMetrics.index(r.m1)
+#col_id_num = service_id + metric_id*numServices
+
+for metric in listMetrics:
+  for service in listServices:
+    service_id = listServices.index(service)
+    metric_id = listMetrics.index(metric)
+    col_id_num = service_id + metric_id*numServices
+    print(col_id_num)
+    if last_chunk<num_train_chunks:
+      plot_by_index(service, metric,col_id_num, last_chunk)
+    else:
+      plot_by_index(service, metric,col_id_num, last_chunk-num_train_chunks, False)
+
+  
+```
+```{python}
+#type(rmseReport.iloc[166])
+#print(rmseReport.iloc[166])
+
+#Rerunning the rmse portion but with the col_id_num generated above
+#Should likely setup rmse as a function and just pass col_id_num but this should do for now.
+table = pd.DataFrame(columns = ['origIndex','Service Name','metric','rmse','Valid Count'])
+for i in range(168):
+  col_id_num = i
+  rmseReport = []
+  pp = preds[:,:,col_id_num].reshape(-1)
+  aa = Y_test[:,:,col_id_num].reshape(-1)
+  real_data_index = Z_test[:,:,col_id_num%numServices].reshape(-1).astype(bool)
+  pp = pp[real_data_index]
+  aa = aa[real_data_index]
+  error += np.square(pp-aa).sum()
+  count += len(pp)
+  rmseuser = np.sqrt(np.square(pp-aa).sum()/len(pp))
+  if col_id_num < numServices:
+    metric = 'Average Response Time (ms)'
+  else:
+    metric = 'Calls per Minute'
+  rmseReport.append((col_id_num,listServices[col_id_num%numServices],metric, rmseuser,len(pp)))
+  rmseReport = pd.DataFrame(data = rmseReport,columns = ['origIndex','Service Name','metric','rmse','Valid Count'])
+  #Last line is the overall RMSE across all services/metrics
+  table = table.append(rmseReport, ignore_index=True)
+  #sheet.append(pd.DataFrame([[1,2,3,4,2,1,1,1]]), ignore_index=True)
+  #RMSE is the variable you would want to expose in R-shiny
+  #might also be worth displaying the # of valid data points for the particular service which can be done with the following: len(pp) going to call variable valc
+  #print(rmseuser)
+  #valc = len(pp)
+  #print(len(pp))
+  #type(rmseReport)
+
+```
+
+
+```{python}
+table
+```
+```{r}
+
+
+Rtable = py$table
+Rtable <- data.frame(matrix(unlist(Rtable), nrow=168))
+#test <- Rtable[Rtable$X3 == 'Calls per Minute',]
+#test <- test[test$X2 == 'advsecutil-svc-clt-ent-wlcore',]
+#test$X4
+```
+
+
+
+
+
+
+
+```{r}
+#Was using this to validate that matlab plots could be successfully rendered in shiny.  I used this sample code and just changed line 555 from 
+#list(src = outfile,
+#to
+#list(src = "myplot.png",
+#If you proceed to then rerun this the graph will no longer load. The code sample has deleteFile = TRUE (line 563).  Can be set to false so you dont have to rerun that bit but I assume the rshiny code will call the python function which generates the graph so probably not a big deal. 
+library(shiny)
+
+## Only run examples in interactive R sessions
+if (interactive()) {
+options(device.ask.default = FALSE)
+
+ui <- fluidPage(
+  sliderInput("n", "Number of observations", 2, 1000, 500),
+  plotOutput("plot1"),
+
+)
+
+server <- function(input, output, session) {
+  # A plot of fixed size
+  output$plot1 <- renderImage({
+    # A temp file to save the output. It will be deleted after renderImage
+    # sends it, because deleteFile=TRUE.
+    outfile <- tempfile(fileext='.png')
+
+    # Generate a png
+    png(outfile, width=200, height=200)
+
+    # Return a list
+   
+    list(src = fileName,
+         alt = "This is alternate text")
+  }, deleteFile = FALSE)
+
+  # A dynamically-sized plot
+  output$plot2 <- renderImage({
+    # Read plot2's width and height. These are reactive values, so this
+    # expression will re-run whenever these values change.
+    width  <- session$clientData$output_plot2_width
+    height <- session$clientData$output_plot2_height
+
+    # A temp file to save the output.
+    outfile <- tempfile(fileext='.png')
+
+    png(outfile, width=width, height=height)
+    hist(rnorm(input$n))
+    dev.off()
+
+    # Return a list containing the filename
+    list(src = outfile,
+         width = width,
+         height = height,
+         alt = "This is alternate text")
+  }, deleteFile = TRUE)
+
+  # Send a pre-rendered image, and don't delete the image after sending it
+  # NOTE: For this example to work, it would require files in a subdirectory
+  # named images/
+  output$plot3 <- renderImage({
+    # When input$n is 1, filename is ./images/image1.jpeg
+    filename <- normalizePath(file.path('./images',
+                              paste('image', input$n, '.jpeg', sep='')))
+
+    # Return a list containing the filename
+    list(src = filename)
+  }, deleteFile = FALSE)
+}
+
+shinyApp(ui, server)
+}
+```
+
+```{r}
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
+
+library(lubridate)
+library(tidyverse)
+library(svDialogs)
+library(reticulate)
+library(tensorflow)
+library(shiny)
+library(fpp2)
+library(scales)
+library(shiny)
+library(datasets)
+library(forecast)
+library(shinyWidgets)
+
+
+
+# Define UI for application that draws a histogram
+ui <- fluidPage(
+    #textInput("txt", "Enter the text to display below:"),
+    #verbatimTextOutput("fileName"),
+    h1("Paychex Service Resource Analyser", align = "center"),
+    br(),
+    br(),
+    # Sidebar with a slider input for number of bins 
+    sidebarLayout(
+        sidebarPanel(
+          #textInput('str',
+          #      'Text to display',
+          #     value = 'This text is being printed by a Python function!'),
+            pickerInput("model", "Choose a model:",
+                        list(`Machine-learning` = list("Choose one" = "","Tensorflow"),
+                             `Time-series` = list("Choose one" = "","ARIMA", "ETS", "Seasonal naive"),
+                             `Linear regression` = list("placeholder4", "placeholder5", "placeholder6"))
+            ),
+            pickerInput("service", "Choose a service:",c("Choose one" = "", "placeholder 1",
+                                                         "placeholder 2",
+                                                         "placeholder 3")),
+            pickerInput("metric", "Choose a metric:",c("Choose one" = "", "placeholder 1",
+                                                         "placeholder 2",
+                                                         "placeholder 3")),
+            #sliderInput(
+            #    "time", "Hours to Forecast Ahead:",
+            #    min = 0, max = 100,
+            #    value = 1),
+            #div(submitButton("Update View"), align = "right"),
+        ),
+        
+        # Show plots
+        mainPanel(
+            tabsetPanel(
+                #tabPanel("Exponetial Smoothing (ETS) Forecast", plotOutput("etsForecastPlot")), 
+                tabPanel("Arima Forecast", plotOutput("forecastPlot")),
+                #tabPanel("Timeseries Decomposition", plotOutput("dcompPlot")),
+                #tabPanel('Accuracy Analysis', tableOutput("accuracy"))
+                tabPanel('Root Mean Square Error (RMSE)',verbatimTextOutput("accuracy"))
+            ),
+            
+        )
+    )
+)
+
+# Define server logic required to draw a histogram
+server <- function(input, output, session) {
+#output$default <- renderText({ input$txt })
+# source the created python script
+#source_python("useful_function.py")
+#output$default <- renderText({ useful_function() })
+#      reticulate::source_python("python_functions.py")
+#     output$default <- renderText({
+#  return(py$listServices)
+#  })
+
+    observeEvent(input$model, {
+        if (input$model == "ARIMA"){
+            x <- c("Choose one" = "", "Arimaservice1",
+                   "Arimaservice2",
+                   "Arimaservice3")
+        }
+        else if (input$model == "Tensorflow"){
+          x <- serviceList
+        }
+        else if (input$model == "ETS"){
+            x <- c("Choose one" = "", "ESTservice1",
+                   "ESTservice2",
+                   "ESTservice3")
+        }
+        else if (input$model == "Seasonal naive"){
+            x <- c("Choose one" = "", "Seasonalservice1",
+                   "Seasonalservice2",
+                   "Seasonalservice3")
+        }
+        else{
+            x <- character(0);
+        }
+        
+        
+        updatePickerInput(session = session, inputId = "service",
+                          choices = x)
+        
+    }, ignoreInit = TRUE)
+    
+    
+    
+    
+    
+    
+    observeEvent(input$service, {
+        if (input$model == "Tensorflow"){
+          y <- metricList
+        }
+        else if (input$service == "Arimaservice1"){
+            y <- c("Choose one" = "", "Arimametric1",
+                   "Arimametric2",
+                   "Arimametric3")
+        }
+        else if (input$service == "Arimaservice2"){
+            y <- c("Choose one" = "", "Arimametric4",
+                   "Arimametric5",
+                   "Arimametric6")
+        }
+        else if (input$service == "Arimaservice3"){
+            y <- c("Choose one" = "", "Arimametric7",
+                   "Arimametric8",
+                   "Arimametric9")
+        }
+        else if (input$service == "ESTservice1"){
+            y <- c("Choose one" = "", "ESTmetric1",
+                   "ESTmetric2",
+                   "ESTmetric3")
+        }
+        else if (input$service == "ESTservice2"){
+            y <- c("Choose one" = "", "ESTmetric4",
+                   "ESTmetric5",
+                   "ESTmetric6")
+        }
+        else if (input$service == "ESTservice3"){
+            y <- c("Choose one" = "", "ESTmetric7",
+                   "ESTmetric8",
+                   "ESTmetric9")
+        }
+        else if (input$service == "ESTservice1"){
+            y <- c("Choose one" = "", "ESTmetric1",
+                   "ESTmetric2",
+                   "ESTmetric3")
+        }
+        else if (input$service == "ESTservice2"){
+            y <- c("Choose one" = "", "ESTmetric4",
+                   "ESTmetric5",
+                   "ESTmetric6")
+        }
+        else if (input$service == "ESTservice3"){
+            y <- c("Choose one" = "", "ESTmetric7",
+                   "ESTmetric8",
+                   "ESTmetric9")
+        }
+        else{
+            y <- character(0);
+        }
+        
+        # Method 1
+        updatePickerInput(session = session, inputId = "metric",
+                          choices = y)
+        
+    }, ignoreInit = TRUE)
+    
+    
+    
+    
+    
+    #output$dcompPlot <- renderPlot({
+    #    ds_ts <- ts(wineind, frequency=12)
+    #    f <- decompose(ds_ts)
+    #    plot(f)
+    #})
+    
+    #output$arimaForecastPlot <- renderPlot({
+        
+        #fit <- auto.arima(wineind)
+        #plot(forecast(fit, h=input$time))
+   # })
+    
+    output$forecastPlot <- renderImage({
+    # A temp file to save the output. It will be deleted after renderImage
+    # sends it, because deleteFile=TRUE.
+    outfile <- tempfile(fileext='.png')
+
+    # Generate a png
+    png(outfile, width=200, height=200)
+
+    # Return a list
+    fileName = paste(input$service, input$metric,".png", sep="")
+    list(src = fileName,
+         alt = "")
+  }, deleteFile = FALSE)
+    
+    #output$fileName <- renderText({
+    #  paste(input$service, input$metric,".png", sep="")
+    #})
+    
+    #beer2 <- window(ausbeer,start=1992,end=c(2007,4))
+    #beerfit1 <- meanf(beer2,h=10)
+    #beer3 <- window(ausbeer, start=2008)
+    output$accuracy <-renderPrint({
+      acc <- Rtable[Rtable$X3 == input$metric,]
+      acc <- acc[acc$X2 == input$service,]
+      acc = acc$X4
+      acc
+    })
+    #output$accuracy <- renderTable(accuracy(beerfit1, beer3))
+    #output$table2 <- renderTable(summary(beerfit1))
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
+ 
+```
+
+
+
+
+
+
+
+
+
+
