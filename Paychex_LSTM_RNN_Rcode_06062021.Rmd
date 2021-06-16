@@ -481,7 +481,7 @@ typeof(serviceList)
 #service_id = listServices.index(r.s1)
 #metric_id = listMetrics.index(r.m1)
 #col_id_num = service_id + metric_id*numServices
-
+last_chunk = np.argmax(index)
 for metric in listMetrics:
   for service in listServices:
     service_id = listServices.index(service)
