@@ -7,7 +7,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
 ```{r}
 library(reticulate)
 library(tensorflow)
@@ -20,68 +19,6 @@ library(tidyverse)
 library(svDialogs)
 
 ```
-
-```{r PC explorations}
-# 
-# ## data ##
-# #
-# #  1.  Establish an account on dataverse using the url: https://dataverse.org/researchers
-# #  2.  Get an API Token: click on your account name in the right hand corner 
-# ##install.packages("dataverse")
-# library("dataverse")
-# # Set environment
-# Sys.setenv("DATAVERSE_SERVER" = "dataverse.harvard.edu")
-# # Put your API Token below
-# Sys.setenv("DATAVERSE_KEY"    = "4c70468d-9bc7-4ff2-9480-0d0cd6e8a49c") 
-# # See whats out there with Dino as author
-# str(dataverse_search(author = "Dino"), 1)
-```
-
-
-```{r get-and-save-data}
-# (dataset <- get_dataset("doi:10.7910/DVN/2JYITQ"))  ## this is the global_id
-# 
-# #Change this below part, not needed
-# dataset
-# f <- get_file(dataset$files$id[1])
-# writeBin(get_file(dataset$files$id[1]),"PC21.csv")
-```
-
-
-```{r read-data}
-
-# #Removable code chunk
-# PC_data <- read.csv("PC21.csv")
-# tail(PC_data)
-# PC_data_ts <- ts(PC_data)
-# head(PC_data_ts)
-# plot.ts(PC_data_ts)
-```
-
-```{r ts-analysis, message=FALSE}
-# #Converts date into a more usable format
-# TZ    <- c("America/New_York")
-# ms.to.date = function(ms, t0="1970-01-01", timezone = TZ) {
-#   ## @ms: a numeric vector of milliseconds (big integers of 13 digits)
-#   ## @t0: a string of the format "yyyy-mm-dd", specifying the date that
-#   ##      corresponds to 0 millisecond
-#   ## @timezone: a string specifying a timezone that can be recognized by R
-#   ## return: a POSIXct vector representing calendar dates and times        
-#   sec = ms / 1000
-#   # Adding the reference date
-#   t0 <- "1970-01-01"
-#   as.POSIXct(sec, origin=t0, tz=timezone)
-# }
-# # Adding new columns for dates, days and hours
-# PC_data$dates <- ms.to.date(PC_data$timeinms)
-# PC_data$days <- weekdays(PC_data$dates)
-# PC_data$hours <- hour(PC_data$dates)
-# PC_data$numericdays <- wday(PC_data$dates)
-# 
-# head(PC_data)
-# write.csv(PC_data,"PayChex_testing123456.csv", row.names = FALSE)
-```
-
 
 ```{python}
 import sys 
@@ -191,9 +128,6 @@ def dfXform(df,numMetrics,numServices,chunk_length, scaler):
     raw_dt_last = scaled['dt'].values[-chunk_length:].reshape(1,chunk_length,-1).astype(float)
     return (X, Z, T, raw_dt, Y),(X_last, raw_dt_last)
     
-  
-  
-  
 
 #Expand data frame to all date-metric combinations, leaving N/A for missing data 
 chunk_length = 100
@@ -356,8 +290,6 @@ rmseReport = pd.DataFrame(data = rmseReport,columns = ['origIndex','Service Name
 #Last line is the overall RMSE across all services/metrics
 
 
-rmseReport
-
 #Fraction of pts within .1 threshhold of scaled predictions
 
 is_correct = (preds - Y_test) < 0.1
@@ -393,7 +325,6 @@ rmseReport.iloc[-5]
 train_preds = model.predict([X_train,Z_train])
 test_preds = model.predict([X_test,Z_test])
 
-
 def plot_by_index(serviceName, metricName, col_id_num, chunk_id=-1, train_data=True):
     #set chunk_id to -1 to always pull most recent chunk 
     if train_data:
@@ -419,7 +350,6 @@ def plot_by_index(serviceName, metricName, col_id_num, chunk_id=-1, train_data=T
     plt.savefig(fileName)
     plt.clf()
 
-
 col_id_num = 4
 
 for i in range(12):
@@ -434,53 +364,39 @@ if last_chunk<num_train_chunks:
 else:
   plot_by_index(col_id_num, last_chunk-num_train_chunks, False)
 
+```
 
-#requested_service_name='cltprdsubscription-svc-pyx-ent-wlcore'
-#requested_metric_name = 'Average Response Time (ms)'
-#service_id = listServices.index(requested_service_name)
-#metric_id = listMetrics.index(requested_metric_name)
-#col_id_num = service_id + metric_id*numServices
+```{python}
 
-#if last_chunk<num_train_chunks:
-#  plot_by_index(col_id_num, last_chunk)
-#else:
-#  plot_by_index(col_id_num, last_chunk-num_train_chunks, False)
+rmseReport["Service Name"].iloc[-1]
+rmseReport["metric"].iloc[-1]
+rmseReport["rmse"].iloc[-1]
+rmseReport["Valid Count"].iloc[-1]
+rmseReport["Previous Hour Scaled Value"].iloc[-1]
+rmseReport["Next Hour Scaled Prediction"].iloc[-1]
+rmseReport["Previous Hour Value"].iloc[-1]
+rmseReport["Next Hour Prediction"].iloc[-1]
+#print(rmseReport.shape)
+print(rmseReport.tail())
+for col in rmseReport.columns:
+    print(col)
 
-
-
-#np.exp(0.03)
-#col_id_num
-#type(listServices)
 ```
 
 
 
 ```{r}
-#User input from shiny to r/python
-#s1 <- ("ent-ose-user-svc-par")
-#m1 <- ("Average Response Time (ms)")
-
 
 #r/python to rshiny
 serviceList <- as.list(py$listServices)
 metricList <- as.list(py$listMetrics)
 typeof(serviceList)
 
-#s = "fd"
-#as = paste(s, "is the", s, "month of the year.")
-#as
-#name = "myplot"
-#fileName = paste(name, ".png",sep = "")
-#fileName
-
 ```
 
 
 ```{python}
-#Generates user requested graph
-#service_id = listServices.index(r.s1)
-#metric_id = listMetrics.index(r.m1)
-#col_id_num = service_id + metric_id*numServices
+
 last_chunk = np.argmax(index)
 for metric in listMetrics:
   for service in listServices:
@@ -492,15 +408,11 @@ for metric in listMetrics:
       plot_by_index(service, metric,col_id_num, last_chunk)
     else:
       plot_by_index(service, metric,col_id_num, last_chunk-num_train_chunks, False)
-
-  
 ```
-```{python}
-#type(rmseReport.iloc[166])
-#print(rmseReport.iloc[166])
 
-#Rerunning the rmse portion but with the col_id_num generated above
-#Should likely setup rmse as a function and just pass col_id_num but this should do for now.
+
+```{python}
+
 table = pd.DataFrame(columns = ['origIndex','Service Name','metric','rmse','Valid Count'])
 for i in range(168):
   col_id_num = i
@@ -532,96 +444,12 @@ for i in range(168):
 ```
 
 
-```{python}
-table
-```
 ```{r}
-
-
+accuracy = py$accuracy
 Rtable = py$table
 Rtable <- data.frame(matrix(unlist(Rtable), nrow=168))
-#test <- Rtable[Rtable$X3 == 'Calls per Minute',]
-#test <- test[test$X2 == 'advsecutil-svc-clt-ent-wlcore',]
-#test$X4
 ```
 
-
-
-
-
-
-
-```{r}
-#Was using this to validate that matlab plots could be successfully rendered in shiny.  I used this sample code and just changed line 555 from 
-#list(src = outfile,
-#to
-#list(src = "myplot.png",
-#If you proceed to then rerun this the graph will no longer load. The code sample has deleteFile = TRUE (line 563).  Can be set to false so you dont have to rerun that bit but I assume the rshiny code will call the python function which generates the graph so probably not a big deal. 
-library(shiny)
-
-## Only run examples in interactive R sessions
-if (interactive()) {
-options(device.ask.default = FALSE)
-
-ui <- fluidPage(
-  sliderInput("n", "Number of observations", 2, 1000, 500),
-  plotOutput("plot1"),
-
-)
-
-server <- function(input, output, session) {
-  # A plot of fixed size
-  output$plot1 <- renderImage({
-    # A temp file to save the output. It will be deleted after renderImage
-    # sends it, because deleteFile=TRUE.
-    outfile <- tempfile(fileext='.png')
-
-    # Generate a png
-    png(outfile, width=200, height=200)
-
-    # Return a list
-   
-    list(src = fileName,
-         alt = "This is alternate text")
-  }, deleteFile = FALSE)
-
-  # A dynamically-sized plot
-  output$plot2 <- renderImage({
-    # Read plot2's width and height. These are reactive values, so this
-    # expression will re-run whenever these values change.
-    width  <- session$clientData$output_plot2_width
-    height <- session$clientData$output_plot2_height
-
-    # A temp file to save the output.
-    outfile <- tempfile(fileext='.png')
-
-    png(outfile, width=width, height=height)
-    hist(rnorm(input$n))
-    dev.off()
-
-    # Return a list containing the filename
-    list(src = outfile,
-         width = width,
-         height = height,
-         alt = "This is alternate text")
-  }, deleteFile = TRUE)
-
-  # Send a pre-rendered image, and don't delete the image after sending it
-  # NOTE: For this example to work, it would require files in a subdirectory
-  # named images/
-  output$plot3 <- renderImage({
-    # When input$n is 1, filename is ./images/image1.jpeg
-    filename <- normalizePath(file.path('./images',
-                              paste('image', input$n, '.jpeg', sep='')))
-
-    # Return a list containing the filename
-    list(src = filename)
-  }, deleteFile = FALSE)
-}
-
-shinyApp(ui, server)
-}
-```
 
 ```{r}
 #
@@ -650,17 +478,34 @@ library(shinyWidgets)
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
-    #textInput("txt", "Enter the text to display below:"),
-    #verbatimTextOutput("fileName"),
+  tags$head(tags$style("#accuracy{
+                                 font-size: 40px;
+                                 text-align: center;
+                                 display: block;
+                                 padding-top: 60px;
+                                 }"
+                         ),
+            tags$style("#overallAccuracy{
+                                  font-size: 40px;
+                                 text-align: center;
+                                 display: block;
+                                 padding-top: 60px;
+                                 }"
+                         ),
+            tags$style("h1{
+                                font-size: 50px;
+                                 text-align: center;
+                                 display: block;
+                                 padding-top: 30px;
+                                 }"
+                         ),
+              ),
     h1("Paychex Service Resource Analyser", align = "center"),
     br(),
     br(),
     # Sidebar with a slider input for number of bins 
     sidebarLayout(
         sidebarPanel(
-          #textInput('str',
-          #      'Text to display',
-          #     value = 'This text is being printed by a Python function!'),
             pickerInput("model", "Choose a model:",
                         list(`Machine-learning` = list("Choose one" = "","Tensorflow"),
                              `Time-series` = list("Choose one" = "","ARIMA", "ETS", "Seasonal naive"),
@@ -683,10 +528,11 @@ ui <- fluidPage(
         mainPanel(
             tabsetPanel(
                 #tabPanel("Exponetial Smoothing (ETS) Forecast", plotOutput("etsForecastPlot")), 
-                tabPanel("Arima Forecast", plotOutput("forecastPlot")),
+                tabPanel("Forecast Plot", plotOutput("forecastPlot")),
                 #tabPanel("Timeseries Decomposition", plotOutput("dcompPlot")),
-                #tabPanel('Accuracy Analysis', tableOutput("accuracy"))
-                tabPanel('Root Mean Square Error (RMSE)',verbatimTextOutput("accuracy"))
+                #tabPanel('Accuracy Analysis', tableOutput("accuracy")),
+                tabPanel('Root Mean Square Error (RMSE)',textOutput("accuracy")),
+                tabPanel('Overall Accuracy',textOutput("overallAccuracy"))
             ),
             
         )
@@ -695,15 +541,6 @@ ui <- fluidPage(
 
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
-#output$default <- renderText({ input$txt })
-# source the created python script
-#source_python("useful_function.py")
-#output$default <- renderText({ useful_function() })
-#      reticulate::source_python("python_functions.py")
-#     output$default <- renderText({
-#  return(py$listServices)
-#  })
-
     observeEvent(input$model, {
         if (input$model == "ARIMA"){
             x <- c("Choose one" = "", "Arimaservice1",
@@ -732,11 +569,6 @@ server <- function(input, output, session) {
                           choices = x)
         
     }, ignoreInit = TRUE)
-    
-    
-    
-    
-    
     
     observeEvent(input$service, {
         if (input$model == "Tensorflow"){
@@ -794,14 +626,20 @@ server <- function(input, output, session) {
         # Method 1
         updatePickerInput(session = session, inputId = "metric",
                           choices = y)
-        
+         output$accuracy <-renderText({
+      acc <- Rtable[Rtable$X3 == input$metric,]
+      acc <- acc[acc$X2 == input$service,]
+      acc1 = acc$X4
+      paste("RMSE = ", substr(acc1, 1, 6), sep="")
+    })
+    #output$accuracy <- renderTable(accuracy(beerfit1, beer3))
+    #output$table2 <- renderTable(summary(beerfit1))
+    output$overallAccuracy <- renderText({
+      paste("Overall accuracy = ", substr(accuracy, 1, 6), sep="")
+    })
     }, ignoreInit = TRUE)
-    
-    
-    
-    
-    
-    #output$dcompPlot <- renderPlot({
+
+        #output$dcompPlot <- renderPlot({
     #    ds_ts <- ts(wineind, frequency=12)
     #    f <- decompose(ds_ts)
     #    plot(f)
@@ -826,22 +664,12 @@ server <- function(input, output, session) {
     list(src = fileName,
          alt = "")
   }, deleteFile = FALSE)
-    
-    #output$fileName <- renderText({
-    #  paste(input$service, input$metric,".png", sep="")
-    #})
-    
+
     #beer2 <- window(ausbeer,start=1992,end=c(2007,4))
     #beerfit1 <- meanf(beer2,h=10)
     #beer3 <- window(ausbeer, start=2008)
-    output$accuracy <-renderPrint({
-      acc <- Rtable[Rtable$X3 == input$metric,]
-      acc <- acc[acc$X2 == input$service,]
-      acc = acc$X4
-      acc
-    })
-    #output$accuracy <- renderTable(accuracy(beerfit1, beer3))
-    #output$table2 <- renderTable(summary(beerfit1))
+   
+    
 }
 
 # Run the application 
