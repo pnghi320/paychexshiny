@@ -424,33 +424,12 @@ typeof(serviceList)
 ```
 
 
-```{python}
-last_chunk = np.argmax(index)
-stats_dict_to_store_for_display_use_this = {}
-for metric in listMetrics:
-  for service in listServices:
-    service_id = listServices.index(service)
-    metric_id = listMetrics.index(metric)
-    col_id_num = service_id + metric_id*numServices
-    print(col_id_num)
-    stat = summaryStatistics.iloc[:,col_id_num]
-    stats_dict_to_store_for_display_use_this[(service, metric)] = stat
-    if last_chunk<num_train_chunks:
-      plot_by_index(service, metric,col_id_num, last_chunk)
-    else:
-      plot_by_index(service, metric,col_id_num, last_chunk-num_train_chunks, False)
 
 
-#Writing to pickle file for Dharma
-#pickle.dump( stats_dict_to_store_for_display_use_this, open( "stats_dict.p", "wb" ) )
-#Reading from pickle file for Dharma
-#stats_dict_to_store_for_display_use_this = pickle.load( open( "stats_dict.p", "rb" ) )
-
-
-```
 
 
 ```{python}
+
 X_last, raw_dt_last = lastHourData #Z_last, T_last, raw_dt_last = lastHourData
 Z_last = 1-X_last[:,:,168:168+84]
 X_last_scaled = X_last.copy()
@@ -511,8 +490,113 @@ predReal = np.exp(unscaledpreds)-1
 print(previousHour[0,col_id_num], predLast[0,-1,col_id_num])
 print(actual[col_id_num],unscaledpreds[col_id_num])
 print(actualReal[col_id_num], predReal[col_id_num])
+```
+
+
+```{python}
+def plot_by_index(slidervalue, serviceName, metricName, col_id_num, chunk_id=-1, train_data=True):
+  X_last, raw_dt_last = lastHourData #Z_last, T_last, raw_dt_last = lastHourData
+  Z_last = 1-X_last[:,:,168:168+84]
+  X_last_scaled = X_last.copy()
+  X_lastflat = X_last[:,:,:numout].reshape(1*chunk_length,-1)
+  X_lastflat_scaled = Scaler.transform(X_lastflat)
+  X_last_scaled[:,:,:numout] = X_lastflat_scaled.reshape([-1,chunk_length,numout])
+  past_meas = X_last_scaled[:,:,:3*84]
+  #predLast = model.predict([X_last_scaled,np.ones((1,chunk_length,numServices))])
+  
+  
+  timestamps = list(raw_dt_last.reshape(-1))
+  timestep = timestamps[-1]-timestamps[-2]
+  tmp = pd.DataFrame(timestamps, columns = ['Date'])
+  tmp['Date'] = pd.to_datetime(tmp['Date'])
+  df_time = expand_dates(tmp, 'Date')
+  past_time = df_time.values.reshape(1,-1,(7+24+12))
+  
+  for i in range(slidervalue):
+    past_all = np.concatenate([past_meas, past_time], axis=2)
+    predLast = model.predict([past_all,np.ones((1,chunk_length,numServices))])
+    filled_predLast = np.concatenate([predLast, np.ones((1,100,84))],axis=2)
+    
+    past_meas = np.concatenate([past_meas[:,1:,:], filled_predLast[:,-1,:].reshape(1,1,-1)], axis=1)
+    
+    timestamps = timestamps[1:] + [timestamps[-1]+timestep]
+    tmp = pd.DataFrame(timestamps, columns = ['Date'])
+    tmp['Date'] = pd.to_datetime(tmp['Date'])
+    df_time = expand_dates(tmp, 'Date')
+    past_time = df_time.values.reshape(1,-1,(7+24+12))
+  
+  #Above this run once per slider choice
+  #Below this run per col_id_num and per slider choice
+
+  plt.plot(past_meas[0,:-slidervalue,col_id_num])
+  plt.plot(predLast[0,:100-slidervalue,col_id_num], c='orange')
+  plt.scatter(range(100-slidervalue,100), past_meas[0,100-slidervalue:,col_id_num], c='r')
+  plt.gca().legend(('real','predicted', 'next_prediction'), loc=2)
+  zs = Z_last[0,slidervalue:,col_id_num%84]
+  if 0 in zs:
+    grid = np.mgrid[0:1:0.01,:(100-slidervalue)].T.reshape(-1,2)
+    plt.scatter(grid[:,1], grid[:,0], c=np.repeat(zs, 100).reshape(-1), alpha=0.1, cmap='gray' )
+  
+  plt.show()
+  fileName = serviceName+metricName+str(slidervalue)+".png"
+  plt.savefig(fileName)
+  plt.clf()
+  
+  previousHour = (X_last_scaled[:,-1,:numMetrics*numServices]) #scaled
+  actual = scaler.inverse_transform(previousHour)[0]
+  actualReal = np.exp(actual)-1
+  
+  unscaledpreds = scaler.inverse_transform(predLast[:,-1,:])[0]
+  predReal = np.exp(unscaledpreds)-1
+```
+
+
+
+
+
+
+
+```{python}
+#last_chunk = np.argmax(index)
+#stats_dict_to_store_for_display_use_this = {}
+#for metric in listMetrics:
+#  for service in listServices:
+#    service_id = listServices.index(service)
+#    metric_id = listMetrics.index(metric)
+#    col_id_num = service_id + metric_id*numServices
+#    print(col_id_num)
+#    stat = summaryStatistics.iloc[:,col_id_num]
+#    stats_dict_to_store_for_display_use_this[(service, metric)] = stat
+#    if last_chunk<num_train_chunks:
+#      plot_by_index(service, metric,col_id_num, last_chunk)
+#    else:
+#      plot_by_index(service, metric,col_id_num, last_chunk-num_train_chunks, False)
+
+
+#Writing to pickle file for Dharma
+#pickle.dump( stats_dict_to_store_for_display_use_this, open( "stats_dict.p", "wb" ) )
+#Reading from pickle file for Dharma
+#stats_dict_to_store_for_display_use_this = pickle.load( open( "stats_dict.p", "rb" ) )
+
+last_chunk = np.argmax(index)
+stats_dict_to_store_for_display_use_this = {}
+for metric in listMetrics:
+  for service in listServices:
+    for i in range (1,11):
+      service_id = listServices.index(service)
+      metric_id = listMetrics.index(metric)
+      col_id_num = service_id + metric_id*numServices
+      print(col_id_num)
+      stat = summaryStatistics.iloc[:,col_id_num]
+      stats_dict_to_store_for_display_use_this[(service, metric)] = stat
+      if last_chunk<num_train_chunks:
+        plot_by_index(i, service, metric,col_id_num, last_chunk)
+      else:
+        plot_by_index(i, service, metric,col_id_num, last_chunk-num_train_chunks, False)
 
 ```
+
+
 
 ```{python}
 
@@ -617,10 +701,10 @@ ui <- fluidPage(
             pickerInput("metric", "Choose a metric:",c("Choose one" = "", "placeholder 1",
                                                          "placeholder 2",
                                                          "placeholder 3")),
-            #sliderInput(
-            #    "time", "Hours to Forecast Ahead:",
-            #    min = 0, max = 100,
-            #    value = 1),
+            sliderInput(
+                "time", "Hours to Forecast Ahead:",
+                min = 1, max = 10,
+                value = 1),
             #div(submitButton("Update View"), align = "right"),
         ),
         
@@ -760,7 +844,7 @@ server <- function(input, output, session) {
     png(outfile, width=200, height=200)
 
     # Return a list
-    fileName = paste(input$service, input$metric,".png", sep="")
+    fileName = paste(input$service, input$metric, input$time, ".png", sep="")
     list(src = fileName,
          alt = "")
   }, deleteFile = FALSE)
