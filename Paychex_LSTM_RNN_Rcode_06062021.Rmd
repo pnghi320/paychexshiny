@@ -582,18 +582,18 @@ last_chunk = np.argmax(index)
 stats_dict_to_store_for_display_use_this = {}
 for metric in listMetrics:
   for service in listServices:
+    service_id = listServices.index(service)
+    metric_id = listMetrics.index(metric)
+    col_id_num = service_id + metric_id*numServices
+    stat = summaryStatistics.iloc[:,col_id_num]
+    stats_dict_to_store_for_display_use_this[(service, metric)] = stat
     for i in range (1,11):
-      service_id = listServices.index(service)
-      metric_id = listMetrics.index(metric)
-      col_id_num = service_id + metric_id*numServices
-      print(col_id_num)
-      stat = summaryStatistics.iloc[:,col_id_num]
-      stats_dict_to_store_for_display_use_this[(service, metric)] = stat
       if last_chunk<num_train_chunks:
         plot_by_index(i, service, metric,col_id_num, last_chunk)
       else:
         plot_by_index(i, service, metric,col_id_num, last_chunk-num_train_chunks, False)
 
+stats_dict_to_store_for_display_use_this
 ```
 
 
