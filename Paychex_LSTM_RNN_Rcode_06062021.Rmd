@@ -557,26 +557,6 @@ def plot_by_index(slidervalue, serviceName, metricName, col_id_num, chunk_id=-1,
 
 
 ```{python}
-#last_chunk = np.argmax(index)
-#stats_dict_to_store_for_display_use_this = {}
-#for metric in listMetrics:
-#  for service in listServices:
-#    service_id = listServices.index(service)
-#    metric_id = listMetrics.index(metric)
-#    col_id_num = service_id + metric_id*numServices
-#    print(col_id_num)
-#    stat = summaryStatistics.iloc[:,col_id_num]
-#    stats_dict_to_store_for_display_use_this[(service, metric)] = stat
-#    if last_chunk<num_train_chunks:
-#      plot_by_index(service, metric,col_id_num, last_chunk)
-#    else:
-#      plot_by_index(service, metric,col_id_num, last_chunk-num_train_chunks, False)
-
-
-#Writing to pickle file for Dharma
-#pickle.dump( stats_dict_to_store_for_display_use_this, open( "stats_dict.p", "wb" ) )
-#Reading from pickle file for Dharma
-#stats_dict_to_store_for_display_use_this = pickle.load( open( "stats_dict.p", "rb" ) )
 
 last_chunk = np.argmax(index)
 stats_dict_to_store_for_display_use_this = {}
@@ -592,10 +572,29 @@ for metric in listMetrics:
         plot_by_index(i, service, metric,col_id_num, last_chunk)
       else:
         plot_by_index(i, service, metric,col_id_num, last_chunk-num_train_chunks, False)
-
-stats_dict_to_store_for_display_use_this
 ```
 
+
+
+
+
+
+```{r}
+df <- data.frame(stringsAsFactors=FALSE)
+
+for (service in serviceList){
+  for (metric in metricList){
+    py_run_string("RSummary = stats_dict_to_store_for_display_use_this[(r.service, r.metric)]")
+    summary = py$RSummary
+    new_row <- c(service, metric, summary)        
+    df = rbind(df, new_row)        
+    
+  }
+}
+
+colnames(df) <- c('Service','Metric','count','mean','std','min','25%','50%','75%','max')
+df
+```
 
 
 ```{python}
@@ -632,13 +631,11 @@ for i in range(168):
 ```
 
 
-```{python}
-table
-```
 ```{r}
 accuracy = py$accuracy
 Rtable = py$table
 Rtable <- data.frame(matrix(unlist(Rtable), nrow=168))
+Rtable
 ```
 
 
@@ -717,6 +714,7 @@ ui <- fluidPage(
                 #tabPanel('Accuracy Analysis', tableOutput("accuracy")),
                 tabPanel('Root Mean Square Error (RMSE)',textOutput("accuracy")),
                 tabPanel('Overall Accuracy',textOutput("overallAccuracy")),
+                tabPanel('Summary',tableOutput("summary")),
                 tabPanel('Help',"After selecting the model, select the service and metric to view relevant information. If the model has gray/black sections, this indicates there was no data available for that time period.")
             ),
             
@@ -816,6 +814,34 @@ server <- function(input, output, session) {
       acc1 = acc$X4
       paste("RMSE = ", substr(acc1, 1, 6), sep="")
     })
+         
+         
+         
+         
+         
+         
+         
+         
+         
+         
+        output$summary <-renderTable({
+          df1 <- df[df$Metric == input$metric,]
+          df1 <- df1[df1$Service == input$service,]
+          df1 = subset(df1, select = -c(Metric,Service) )
+          df1
+    })
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
     #output$accuracy <- renderTable(accuracy(beerfit1, beer3))
     #output$table2 <- renderTable(summary(beerfit1))
     output$overallAccuracy <- renderText({
