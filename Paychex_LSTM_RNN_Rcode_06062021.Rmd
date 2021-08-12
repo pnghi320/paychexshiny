@@ -43,7 +43,6 @@ from tensorflow.keras.layers import Dropout
 import matplotlib as mpl
 import os
 import pickle
-
                  
 #Get the data for metrics of interest
 # mask = np.logical_or(data['metricName'] == 'Calls per Minute', data['metricName'] == 'Average Response Time (ms)')
@@ -62,7 +61,6 @@ def expand_dates(df, date_col):
     tmp_dayofweek.columns = ["DayofWeek_"+str(i) for i in range(7)]
     tmp_hour.columns = ["Hour_"+str(i) for i in range(24)]
     return pd.concat([tmp_hour, tmp_dayofweek, tmp_month], axis=1)
-
 def loadData(dfraw):
     #"""Takes data from dataverse as a dataframe, cleans up missing values, rearranges into row by date, expands variables.
     #Output columns are the metric/service combinations followed by missing_columns that denote data which needed to be filled in
@@ -113,16 +111,11 @@ def loadData(dfraw):
     #sortedGood = pd.get_dummies(sortedGood,columns = ['Hour','DayofWeek','Month'])
     results = [sortedGood,len(good_service),numMetrics,summaryStatistics]
     return results
-
-df2 = pd.read_csv (r"/Users/tranquynhphuongnghi/Desktop/LSTM/PayChex_Data_convTimstamp_Date123.csv")
-data = pd.read_csv(r"/Users/tranquynhphuongnghi/Desktop/LSTM/PayChex_Data_convTimstamp_Date123.csv", 
+df2 = pd.read_csv (r"/Users/tranquynhphuongnghi/Desktop/PayChex_Data_convTimstamp_Date123.csv")
+data = pd.read_csv(r"/Users/tranquynhphuongnghi/Desktop/PayChex_Data_convTimstamp_Date123.csv", 
                  parse_dates={'dt' : ['dates']}, infer_datetime_format=True, 
                  low_memory=False, na_values=['nan','?'], index_col='dt')
-#df2 = pd.read_csv (r"C:\Users\Tyler\Desktop\Newfolder2\PayChex\Data\PayChex_Data_convTimstamp_Date123.csv")
-#data = pd.read_csv(r"C:\Users\Tyler\Desktop\Newfolder2\PayChex\Data\PayChex_Data_convTimstamp_Date123.csv", 
-#                 parse_dates={'dt' : ['dates']}, infer_datetime_format=True, 
-#                 low_memory=False, na_values=['nan','?'], index_col='dt')
-  
+
 #Function break comment
 def dfXform(df,numMetrics,numServices,chunk_length, scaler):
     #From master_df grab the following:
@@ -224,7 +217,6 @@ def runModel(hidden_dim,epochs,x_train,y_train,z_train,x_test,y_test,z_test):
     rnn = LSTM(hidden_dim, return_sequences=True) (dropout)
     post = Dense(hidden_dim, activation='relu')(rnn)
     pred = Dense(numout)(post) 
-    #pred = Dense(numout,activation='sigmoid')(post) 
     z_in = Input(shape=(chunk_length,numServices))
     zd_in = Concatenate()([z_in,z_in])
     output = Multiply()([pred,zd_in])#masking 0
@@ -285,11 +277,35 @@ for i in range(2*numServices):
 rmseReport = pd.DataFrame(data = rmseReport,columns = ['origIndex','Service Name','metric','rmse','Valid Count'])
 #Last line is the overall RMSE across all services/metrics
 rmseReport
+
+
+#Fraction of pts within .3 threshhold of scaled predictions
+is_correct30 = (preds - Y_test) < 0.3
+is_correct30 = is_correct30.reshape(-1)
+accuracy30 = np.sum(is_correct30)/len(is_correct30)
+print(accuracy30)
+#Fraction of pts within .25 threshhold of scaled predictions
+is_correct25 = (preds - Y_test) < 0.25
+is_correct25 = is_correct25.reshape(-1)
+accuracy25 = np.sum(is_correct25)/len(is_correct25)
+print(accuracy25)
+#Fraction of pts within .2 threshhold of scaled predictions
+is_correct20 = (preds - Y_test) < 0.2
+is_correct20 = is_correct20.reshape(-1)
+accuracy20 = np.sum(is_correct20)/len(is_correct20)
+print(accuracy20)
 #Fraction of pts within .1 threshhold of scaled predictions
 is_correct = (preds - Y_test) < 0.1
 is_correct = is_correct.reshape(-1)
 accuracy = np.sum(is_correct)/len(is_correct)
 print(accuracy)
+#Fraction of pts within .05 threshhold of scaled predictions
+is_correct05 = (preds - Y_test) < 0.05
+is_correct05 = is_correct05.reshape(-1)
+accuracy05 = np.sum(is_correct05)/len(is_correct05)
+print(accuracy05)
+
+
 X_last, raw_dt_last = lastHourData #Z_last, T_last, raw_dt_last = lastHourData
 X_last_scaled = X_last.copy()
 X_lastflat = X_last[:,:,:numout].reshape(1*chunk_length,-1)
@@ -312,9 +328,6 @@ train_preds = model.predict([X_train,Z_train])
 test_preds = model.predict([X_test,Z_test])
 #grid = np.mgrid[0:Z_train.shape[1], 0:1:0.01].T.reshape(100*100,2)
 len(np.repeat(Z_train[0,:,4],100).reshape(-1))
-
-
-
 def plot_by_index(serviceName, metricName, col_id_num, chunk_id=-1, train_data=True):
     #set chunk_id to -1 to always pull most recent chunk 
     if train_data:
@@ -343,11 +356,6 @@ def plot_by_index(serviceName, metricName, col_id_num, chunk_id=-1, train_data=T
     plt.savefig(fileName)
     plt.clf()
     
-
-
-
-
-
 # col_id_num = 4
 # for i in range(12):
 #   plot_by_index(col_id_num, i)
@@ -358,9 +366,7 @@ def plot_by_index(serviceName, metricName, col_id_num, chunk_id=-1, train_data=T
 #   plot_by_index(col_id_num, last_chunk)
 # else:
 #   plot_by_index(col_id_num, last_chunk-num_train_chunks, False)
-
 plot_by_index('a','b', 4, -1, True)
-
 # 
 # 
 # 
@@ -400,7 +406,6 @@ plot_by_index('a','b', 4, -1, True)
 
 
 ```{python}
-
 rmseReport["Service Name"].iloc[-1]
 rmseReport["metric"].iloc[-1]
 rmseReport["rmse"].iloc[-1]
@@ -413,7 +418,6 @@ rmseReport["Next Hour Prediction"].iloc[-1]
 print(rmseReport.tail())
 for col in rmseReport.columns:
     print(col)
-
 ```
 
 ```{r}
@@ -429,7 +433,6 @@ typeof(serviceList)
 
 
 ```{python}
-
 X_last, raw_dt_last = lastHourData #Z_last, T_last, raw_dt_last = lastHourData
 Z_last = 1-X_last[:,:,168:168+84]
 X_last_scaled = X_last.copy()
@@ -438,17 +441,13 @@ X_lastflat_scaled = Scaler.transform(X_lastflat)
 X_last_scaled[:,:,:numout] = X_lastflat_scaled.reshape([-1,chunk_length,numout])
 past_meas = X_last_scaled[:,:,:3*84]
 #predLast = model.predict([X_last_scaled,np.ones((1,chunk_length,numServices))])
-
-
 timestamps = list(raw_dt_last.reshape(-1))
 timestep = timestamps[-1]-timestamps[-2]
 tmp = pd.DataFrame(timestamps, columns = ['Date'])
 tmp['Date'] = pd.to_datetime(tmp['Date'])
 df_time = expand_dates(tmp, 'Date')
 past_time = df_time.values.reshape(1,-1,(7+24+12))
-
 slidervalue = 5
-
 for i in range(slidervalue):
   past_all = np.concatenate([past_meas, past_time], axis=2)
   predLast = model.predict([past_all,np.ones((1,chunk_length,numServices))])
@@ -461,32 +460,24 @@ for i in range(slidervalue):
   tmp['Date'] = pd.to_datetime(tmp['Date'])
   df_time = expand_dates(tmp, 'Date')
   past_time = df_time.values.reshape(1,-1,(7+24+12))
-
 #Above this run once per slider choice
 #Below this run per col_id_num and per slider choice
-
 col_id_num = 6
-
 plt.plot(past_meas[0,:-slidervalue,col_id_num])
 plt.plot(predLast[0,:100-slidervalue,col_id_num], c='orange')
-plt.scatter(range(100-slidervalue,100), past_meas[0,100-slidervalue:,col_id_num], c='r')
+plt.plot(range(100-slidervalue,100), past_meas[0,100-slidervalue:,col_id_num], c='r',marker='^', markersize=2.8, linewidth=.5)
 plt.gca().legend(('real','predicted', 'next_prediction'), loc=2)
 zs = Z_last[0,slidervalue:,col_id_num%84]
 if 0 in zs:
   grid = np.mgrid[0:1:0.01,:(100-slidervalue)].T.reshape(-1,2)
   plt.scatter(grid[:,1], grid[:,0], c=np.repeat(zs, 100).reshape(-1), alpha=0.1, cmap='gray' )
-
 plt.show()
 plt.clf()
-
-
 previousHour = (X_last_scaled[:,-1,:numMetrics*numServices]) #scaled
 actual = scaler.inverse_transform(previousHour)[0]
 actualReal = np.exp(actual)-1
-
 unscaledpreds = scaler.inverse_transform(predLast[:,-1,:])[0]
 predReal = np.exp(unscaledpreds)-1
-
 print(previousHour[0,col_id_num], predLast[0,-1,col_id_num])
 print(actual[col_id_num],unscaledpreds[col_id_num])
 print(actualReal[col_id_num], predReal[col_id_num])
@@ -527,10 +518,12 @@ def plot_by_index(slidervalue, serviceName, metricName, col_id_num, chunk_id=-1,
   
   #Above this run once per slider choice
   #Below this run per col_id_num and per slider choice
-
   plt.plot(past_meas[0,:-slidervalue,col_id_num])
   plt.plot(predLast[0,:100-slidervalue,col_id_num], c='orange')
-  plt.scatter(range(100-slidervalue,100), past_meas[0,100-slidervalue:,col_id_num], c='r')
+  #plt.scatter(range(100-slidervalue,100), past_meas[0,100-slidervalue:,col_id_num], c='r')
+  plt.plot(range(100-slidervalue,100), past_meas[0,100-slidervalue:,col_id_num], c='r',marker='^', markersize=2.8,linewidth=.5)
+  plt.xlabel("Hours")
+  plt.ylabel("Scaled Predictive Value")
   plt.gca().legend(('real','predicted', 'next_prediction'), loc=2)
   zs = Z_last[0,slidervalue:,col_id_num%84]
   if 0 in zs:
@@ -557,7 +550,6 @@ def plot_by_index(slidervalue, serviceName, metricName, col_id_num, chunk_id=-1,
 
 
 ```{python}
-
 last_chunk = np.argmax(index)
 stats_dict_to_store_for_display_use_this = {}
 for metric in listMetrics:
@@ -572,6 +564,7 @@ for metric in listMetrics:
         plot_by_index(i, service, metric,col_id_num, last_chunk)
       else:
         plot_by_index(i, service, metric,col_id_num, last_chunk-num_train_chunks, False)
+
 ```
 
 
@@ -581,7 +574,6 @@ for metric in listMetrics:
 
 ```{r}
 df <- data.frame(stringsAsFactors=FALSE)
-
 for (service in serviceList){
   for (metric in metricList){
     py_run_string("RSummary = stats_dict_to_store_for_display_use_this[(r.service, r.metric)]")
@@ -591,14 +583,12 @@ for (service in serviceList){
     
   }
 }
-
 colnames(df) <- c('Service','Metric','count','mean','std','min','25%','50%','75%','max')
 df
 ```
 
 
 ```{python}
-
 #Rerunning the rmse portion but with the col_id_num generated above
 #Should likely setup rmse as a function and just pass col_id_num but this should do for now.
 table = pd.DataFrame(columns = ['origIndex','Service Name','metric','rmse','Valid Count'])
@@ -621,18 +611,31 @@ for i in range(168):
   rmseReport = pd.DataFrame(data = rmseReport,columns = ['origIndex','Service Name','metric','rmse','Valid Count'])
   #Last line is the overall RMSE across all services/metrics
   table = table.append(rmseReport, ignore_index=True)
-  #sheet.append(pd.DataFrame([[1,2,3,4,2,1,1,1]]), ignore_index=True)
-  #RMSE is the variable you would want to expose in R-shiny
-  #might also be worth displaying the # of valid data points for the particular service which can be done with the following: len(pp) going to call variable valc
-  #print(rmseuser)
-  #valc = len(pp)
-  #print(len(pp))
-  #type(rmseReport)
+
+#sheet.append(pd.DataFrame([[1,2,3,4,2,1,1,1]]), ignore_index=True)
+#RMSE is the variable you would want to expose in R-shiny
+#might also be worth displaying the # of valid data points for the particular service which can be done with the following: len(pp) going to call variable valc
+#print(rmseuser)
+#valc = len(pp)
+#print(len(pp))
+#type(rmseReport)
+
 ```
 
 
 ```{r}
+
+accuracy30 = py$accuracy30
+accuracy30 = accuracy30 * 100
+accuracy25 = py$accuracy25
+accuracy25 = accuracy25 * 100
+accuracy20 = py$accuracy20
+accuracy20 = accuracy20 * 100
 accuracy = py$accuracy
+accuracy = accuracy * 100
+accuracy05 = py$accuracy05
+accuracy05 = accuracy05 * 100
+
 Rtable = py$table
 Rtable <- data.frame(matrix(unlist(Rtable), nrow=168))
 Rtable
@@ -644,7 +647,6 @@ Rtable
 
 
 ```{r}
-
 library(lubridate)
 library(tidyverse)
 library(svDialogs)
@@ -667,10 +669,10 @@ ui <- fluidPage(
                                  }"
                          ),
             tags$style("#overallAccuracy{
-                                  font-size: 40px;
+                                  font-size: 20px;
                                  text-align: center;
                                  display: block;
-                                 padding-top: 60px;
+                                 padding-top: 30px;
                                  }"
                          ),
             tags$style("h1{
@@ -681,7 +683,7 @@ ui <- fluidPage(
                                  }"
                          ),
               ),
-    h1("Paychex Service Resource Analyser", align = "center"),
+    h1("Wilson", align = "center"),
     br(),
     br(),
     # Sidebar with a slider input for number of bins 
@@ -701,7 +703,7 @@ ui <- fluidPage(
             sliderInput(
                 "time", "Hours to Forecast Ahead:",
                 min = 1, max = 10,
-                value = 1),
+                value = 1,ticks= FALSE),
             #div(submitButton("Update View"), align = "right"),
         ),
         
@@ -713,7 +715,7 @@ ui <- fluidPage(
                 #tabPanel("Timeseries Decomposition", plotOutput("dcompPlot")),
                 #tabPanel('Accuracy Analysis', tableOutput("accuracy")),
                 tabPanel('Root Mean Square Error (RMSE)',textOutput("accuracy")),
-                tabPanel('Overall Accuracy',textOutput("overallAccuracy")),
+                tabPanel('Overall Accuracy',verbatimTextOutput("overallAccuracy")),
                 tabPanel('Summary',tableOutput("summary")),
                 tabPanel('Help',"After selecting the model, select the service and metric to view relevant information. If the model has gray/black sections, this indicates there was no data available for that time period.")
             ),
@@ -845,10 +847,10 @@ server <- function(input, output, session) {
     #output$accuracy <- renderTable(accuracy(beerfit1, beer3))
     #output$table2 <- renderTable(summary(beerfit1))
     output$overallAccuracy <- renderText({
-      paste("Overall accuracy = ", substr(accuracy, 1, 6), sep="")
+      
+      paste(substr(accuracy05, 1, 6), "%", " of the data points lie within the ±5% interval" ,"\n",substr(accuracy, 1, 6), "%", " of the data points lie within the ±10% interval" ,"\n",substr(accuracy20, 1, 6), "%", " of the data points lie within the ±20% interval" , "\n",substr(accuracy25, 1, 6), "%", " of the data points lie within the ±25% interval" ,"\n",substr(accuracy30, 1, 6), "%", " of the data points lie within the ±30% interval" ,sep="")
     })
     }, ignoreInit = TRUE)
-
         #output$dcompPlot <- renderPlot({
     #    ds_ts <- ts(wineind, frequency=12)
     #    f <- decompose(ds_ts)
@@ -865,27 +867,20 @@ server <- function(input, output, session) {
     # A temp file to save the output. It will be deleted after renderImage
     # sends it, because deleteFile=TRUE.
     outfile <- tempfile(fileext='.png')
-
     # Generate a png
     png(outfile, width=200, height=200)
-
     # Return a list
     fileName = paste(input$service, input$metric, input$time, ".png", sep="")
     list(src = fileName,
          alt = "")
   }, deleteFile = FALSE)
-
     #beer2 <- window(ausbeer,start=1992,end=c(2007,4))
     #beerfit1 <- meanf(beer2,h=10)
     #beer3 <- window(ausbeer, start=2008)
    
     
 }
-
 # Run the application 
 shinyApp(ui = ui, server = server)
  
 ```
-
-
-
